@@ -112,3 +112,22 @@ operatorNamespace: default
 # by the operator. In other words, the images specified under the fields `operatorImage` and `image`
 # should carry matching Ray versions.
 operatorImage: rayproject/ray:latest
+
+# MCAD Settings:
+
+# Key for MCAD settings
+mcad:
+    # mcad.enabled - if true, raycluster will be wrapped within an AppWrapper Custom
+    # resource.
+    enabled: false
+    # Key for Kubernetes Co-Scheduler settings.
+    coScheduler:
+        # mcad.coScheduler.enabled - This will generate podGroup defintions and references
+        # in the RayCluster definitions for gang scheduling (co-scheduling) of all pods 
+        # of a RayCluster (head and worker pods).
+        enabled: false
+        # mcad.coScheduler.customName - The co-scheduler can be installed as a plugin of 
+        # the default scheduler or it can be a separate custom scheduler.  If the co-scheduler
+        # is installed as a separate custom scheduler the name should be defined and will
+        # be added to the RayCluster definition.
+        customName:

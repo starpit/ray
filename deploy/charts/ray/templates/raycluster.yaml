@@ -10,18 +10,6 @@ spec:
   resources:
     Items: []
     GenericItems:
-    # Define a pod group if co-scheduling (gang scheduling) enabled.
-    {{- if .Values.mcad.coScheduler.enabled }}
-    - replicas: 1
-      generictemplate:
-        apiVersion: scheduling.sigs.k8s.io/v1alpha1
-        kind: PodGroup
-        metadata:
-          name: {{ .Release.Name }}
-        spec:
-          minMember: {{ add .Values.podTypes.rayWorkerType.maxWorkers 1 }}
-          scheduleTimeoutSeconds: 10
-    {{- end }}
     - replicas: 1
       # AppWrapper resource demands of the Ray Cluster
       custompodresources:
@@ -98,14 +86,8 @@ spec:
 {{ $spacing }}          {{- if $.Values.mcad.enabled }}
 {{ $spacing }}          labels:
 {{ $spacing }}            appwrapper.mcad.ibm.com: {{ $.Release.Name }}
-{{ $spacing }}            {{- if $.Values.mcad.coScheduler.enabled }}
-{{ $spacing }}            pod-group.scheduling.sigs.k8s.io: {{ $.Release.Name }}
-{{ $spacing }}            {{- end }}
 {{ $spacing }}          {{- end }}
 {{ $spacing }}        spec:
-{{ $spacing }}          {{- if and ($.Values.mcad.enabled) ($.Values.mcad.coScheduler.enabled) ($.Values.mcad.coScheduler.customName) }}
-{{ $spacing }}          schedulerName: {{ $.Values.mcad.coScheduler.customName }}
-{{ $spacing }}          {{- end }}
 {{ $spacing }}          restartPolicy: Never
 {{ $spacing }}          # This volume allocates shared memory for Ray to use for its plasma
 {{ $spacing }}          # object store. If you do not provide this, Ray will fall back to

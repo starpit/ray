@@ -1,160 +1,114 @@
-{{- if not .Values.operatorOnly }}
 {{- $spacing := "" -}}
+{{- $mcadEnabled := false -}}
 {{- if .Values.mcad.enabled }}
-{{- $spacing = "        " -}}
-apiVersion: mcad.ibm.com/v1beta1
-kind: AppWrapper
+  {{- $mcadEnabled = true -}}
+  {{- $spacing = "          " -}}
+{{- end }}
+
+{{- if not .Values.operatorOnly }}
+apiVersion: cluster.ray.io/v1
+kind: RayCluster
 metadata:
   name: {{ .Release.Name }}
 spec:
-  resources:
-    Items: []
-    GenericItems:
-    - replicas: 1
-      # AppWrapper resource demands of the Ray Cluster
-      custompodresources:
-      # Header Pod - custom pod resource definition.  Assumption is 1 head pod.
-      - replicas: 1
-        requests:
-          cpu: {{ .Values.podTypes.rayHeadType.CPU }}
-          memory: {{ .Values.podTypes.rayHeadType.memory }}
-          {{- if .Values.podTypes.rayHeadType.GPU }}
-            nvidia.com/gpu: {{ .Values.podTypes.rayHeadType.GPU }}
-          {{- end }}
-        limits:
-          cpu: {{ .Values.podTypes.rayHeadType.CPU }}
-          memory: {{ .Values.podTypes.rayHeadType.memory }}
-          {{- if .Values.podTypes.rayHeadType.GPU }}
-            nvidia.com/gpu: {{ .Values.podTypes.rayHeadType.GPU }}
-          {{- end }}
-      # Worker Pod(s) - custom pod resource definition
-      - replicas: {{ .Values.podTypes.rayWorkerType.maxWorkers }}
-        requests:
-          cpu: {{ .Values.podTypes.rayWorkerType.CPU }}
-          memory: {{ .Values.podTypes.rayWorkerType.memory }}
-          {{- if .Values.podTypes.rayWorkerType.GPU }}
-            nvidia.com/gpu: {{ .Values.podTypes.rayWorkerType.GPU }}
-          {{- end }}
-        limits:
-          cpu: {{ .Values.podTypes.rayWorkerType.CPU }}
-          memory: {{ .Values.podTypes.rayWorkerType.memory }}
-          {{- if .Values.podTypes.rayWorkerType.GPU }}
-            nvidia.com/gpu: {{ .Values.podTypes.rayWorkerType.GPU }}
-          {{- end }}
-      generictemplate:
-{{- end }}
-{{ $spacing }}apiVersion: cluster.ray.io/v1
-{{ $spacing }}kind: RayCluster
-{{ $spacing }}metadata:
-{{ $spacing }}  name: {{ .Release.Name }}
-{{ $spacing }}  {{- if .Values.mcad.enabled }}
-{{ $spacing }}  labels:
-{{ $spacing }}    appwrapper.mcad.ibm.com: {{ .Release.Name }}
-{{ $spacing }}  {{- end }}
-{{ $spacing }}spec:
-{{ $spacing }}  # The maximum number of workers nodes to launch in addition to the head node.
-{{ $spacing }}  maxWorkers: {{ include "ray.clusterMaxWorkers" . }}
-{{ $spacing }}  # The autoscaler will scale up the cluster faster with higher upscaling speed.
-{{ $spacing }}  # E.g., if the task requires adding more nodes then autoscaler will gradually
-{{ $spacing }}  # scale up the cluster in chunks of upscaling_speed*currently_running_nodes.
-{{ $spacing }}  # This number should be > 0.
-{{ $spacing }}  upscalingSpeed: {{ .Values.upscalingSpeed | default 1.0 }}
-{{ $spacing }}  # If a node is idle for this many minutes, it will be removed.
-{{ $spacing }}  idleTimeoutMinutes: {{ .Values.idleTimeoutMinutes | default 5 }}
-{{ $spacing }}  # Specify the pod type for the ray head node (as configured below).
-{{ $spacing }}  headPodType: {{ .Values.headPodType }}
-{{ $spacing }}  # Specify the allowed pod types for this ray cluster and the resources they provide.
-{{ $spacing }}  podTypes:
-{{ $spacing }}    {{- range $key, $val := .Values.podTypes }}
-{{ $spacing }}    - name: {{ $key }}
-{{ $spacing }}      #  Current MCAD version supports static rayclusters
-{{ $spacing }}      {{- if $.Values.mcad.enabled }}
-{{ $spacing }}      minWorkers: {{ $val.maxWorkers | default 0}}
-{{ $spacing }}      {{- else }}
-{{ $spacing }}      minWorkers: {{ $val.minWorkers | default 0}}
-{{ $spacing }}      {{- end }}
-{{ $spacing }}      maxWorkers: {{ $val.maxWorkers | default 0}}
-{{ $spacing }}      {{- if $val.rayResources }}
-{{ $spacing }}      rayResources:
-{{ $spacing }}        {{- toYaml $val.rayResources | nindent 8 }}
-{{ $spacing }}      {{- end }}
-{{ $spacing }}      podConfig:
-{{ $spacing }}        apiVersion: v1
-{{ $spacing }}        kind: Pod
-{{ $spacing }}        metadata:
-{{ $spacing }}          generateName: {{ kebabcase $key }}-
-{{ $spacing }}          {{- if $.Values.mcad.enabled }}
-{{ $spacing }}          labels:
-{{ $spacing }}            appwrapper.mcad.ibm.com: {{ $.Release.Name }}
-{{ $spacing }}          {{- end }}
-{{ $spacing }}        spec:
-{{ $spacing }}          restartPolicy: Never
-{{ $spacing }}          # This volume allocates shared memory for Ray to use for its plasma
-{{ $spacing }}          # object store. If you do not provide this, Ray will fall back to
-{{ $spacing }}          # /tmp which cause slowdowns if is not a shared memory volume.
-{{ $spacing }}          volumes:
-{{ $spacing }}          - name: dshm
-{{ $spacing }}            emptyDir:
-{{ $spacing }}              medium: Memory
-{{ $spacing }}          containers:
-{{ $spacing }}          - name: ray-node
-{{ $spacing }}            imagePullPolicy: Always
-{{ $spacing }}            image: {{ $.Values.image }}
-{{ $spacing }}            # Do not change this command - it keeps the pod alive until it is
-{{ $spacing }}            # explicitly killed.
-{{ $spacing }}            command: ["/bin/bash", "-c", "--"]
-{{ $spacing }}            args: ['trap : TERM INT; sleep infinity & wait;']
-{{ $spacing }}            env:
-{{ $spacing }}            - name: RAY_gcs_server_rpc_server_thread_num
-{{ $spacing }}              value: "1"
-{{ $spacing }}            ports:
-{{ $spacing }}            - containerPort: 6379  # Redis port for Ray <= 1.10.0. GCS server port for Ray >= 1.11.0.
-{{ $spacing }}            - containerPort: 10001  # Used by Ray Client
-{{ $spacing }}            - containerPort: 8265  # Used by Ray Dashboard
-{{ $spacing }}            - containerPort: 8000 # Used by Ray Serve
-{{ $spacing }}
-{{ $spacing }}            # This volume allocates shared memory for Ray to use for its plasma
-{{ $spacing }}            # object store. If you do not provide this, Ray will fall back to
-{{ $spacing }}            # /tmp which cause slowdowns if is not a shared memory volume.
-{{ $spacing }}            volumeMounts:
-{{ $spacing }}            - mountPath: /dev/shm
-{{ $spacing }}              name: dshm
-{{ $spacing }}            resources:
-{{ $spacing }}              requests:
-{{ $spacing }}                cpu: {{ .CPU }}
-{{ $spacing }}                memory: {{ .memory }}
-{{ $spacing }}              limits:
-{{ $spacing }}                cpu: {{ .CPU }}
-{{ $spacing }}                # The maximum memory that this pod is allowed to use. The
-{{ $spacing }}                # limit will be detected by ray and split to use 10% for
-{{ $spacing }}                # redis, 30% for the shared memory object store, and the
-{{ $spacing }}                # rest for application memory. If this limit is not set and
-{{ $spacing }}                # the object store size is not set manually, ray will
-{{ $spacing }}                # allocate a very large object store in each pod that may
-{{ $spacing }}                # cause problems for other pods.
-{{ $spacing }}                memory: {{ .memory }}
-{{ $spacing }}                {{- if .GPU }}
-{{ $spacing }}                nvidia.com/gpu: {{ .GPU }}
-{{ $spacing }}                {{- end }}
-{{ $spacing }}          {{- if .nodeSelector }}
-{{ $spacing }}          nodeSelector:
-{{ $spacing }}          {{- toYaml $val.nodeSelector | nindent 12 }}
-{{ $spacing }}          {{- end }}
-{{ $spacing }}          {{- if $val.tolerations }}
-{{ $spacing }}          tolerations:
-{{ $spacing }}          {{- toYaml $val.tolerations | nindent 10 }}
-{{ $spacing }}          {{- end }}
-{{ $spacing }}          {{- if $.Values.serviceAccountName }}
-{{ $spacing }}          serviceAccountName: {{ $.Values.serviceAccountName }}
-{{ $spacing }}          {{- end }}
-{{ $spacing }}    {{- end }}
-{{ $spacing }}  # Commands to start Ray on the head node. You don't need to change this.
-{{ $spacing }}  # Note dashboard-host is set to 0.0.0.0 so that Kubernetes can port forward.
-{{ $spacing }}  headStartRayCommands:
-{{ $spacing }}    - ray stop
-{{ $spacing }}    - ulimit -n 65536; ray start --head --port=6379 --no-monitor --dashboard-host 0.0.0.0
-{{ $spacing }}  # Commands to start Ray on worker nodes. You don't need to change this.
-{{ $spacing }}  workerStartRayCommands:
-{{ $spacing }}    - ray stop
-{{ $spacing }}    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379
+  # The maximum number of workers nodes to launch in addition to the head node.
+  maxWorkers: {{ include "ray.clusterMaxWorkers" . }}
+  # The autoscaler will scale up the cluster faster with higher upscaling speed.
+  # E.g., if the task requires adding more nodes then autoscaler will gradually
+  # scale up the cluster in chunks of upscaling_speed*currently_running_nodes.
+  # This number should be > 0.
+  upscalingSpeed: {{ .Values.upscalingSpeed | default 1.0 }}
+  # If a node is idle for this many minutes, it will be removed.
+  idleTimeoutMinutes: {{ .Values.idleTimeoutMinutes | default 5 }}
+  # Specify the pod type for the ray head node (as configured below).
+  headPodType: {{ .Values.headPodType }}
+  # Specify the allowed pod types for this ray cluster and the resources they provide.
+  podTypes:
+    {{- range $key, $val := .Values.podTypes }}
+    - name: {{ $key }}
+      minWorkers: {{ $val.minWorkers | default 0}}
+      maxWorkers: {{ $val.maxWorkers | default 0}}
+      {{- if $val.rayResources }}
+      rayResources:
+        {{- toYaml $val.rayResources | nindent 8 }}
+      {{- end }}
+      podConfig:
+        {{- if $mcadEnabled -}}
+        apiVersion: mcad.ibm.com/v1beta1
+        kind: AppWrapper
+        {{- end }}
+        {{ $spacing }}apiVersion: v1
+        {{ $spacing }}kind: Pod
+        {{ $spacing }}metadata:
+        {{ $spacing }}  generateName: {{ kebabcase $key }}-
+        {{ $spacing }}spec:
+        {{ $spacing }}  restartPolicy: Never
+        {{ $spacing }}  # This volume allocates shared memory for Ray to use for its plasma
+        {{ $spacing }}  # object store. If you do not provide this, Ray will fall back to
+        {{ $spacing }}  # /tmp which cause slowdowns if is not a shared memory volume.
+        {{ $spacing }}  volumes:
+        {{ $spacing }}  - name: dshm
+        {{ $spacing }}    emptyDir:
+        {{ $spacing }}      medium: Memory
+        {{ $spacing }}  containers:
+        {{ $spacing }}  - name: ray-node
+        {{ $spacing }}    imagePullPolicy: Always
+        {{ $spacing }}    image: {{ $.Values.image }}
+        {{ $spacing }}    # Do not change this command - it keeps the pod alive until it is
+        {{ $spacing }}    # explicitly killed.
+        {{ $spacing }}    command: ["/bin/bash", "-c", "--"]
+        {{ $spacing }}    args: ['trap : TERM INT; sleep infinity & wait;']
+        {{ $spacing }}    env:
+        {{ $spacing }}    - name: RAY_gcs_server_rpc_server_thread_num
+        {{ $spacing }}      value: "1"
+        {{ $spacing }}    ports:
+        {{ $spacing }}    - containerPort: 6379  # Redis port for Ray <= 1.10.0. GCS server port for Ray >= 1.11.0.
+        {{ $spacing }}    - containerPort: 10001  # Used by Ray Client
+        {{ $spacing }}    - containerPort: 8265  # Used by Ray Dashboard
+        {{ $spacing }}    - containerPort: 8000 # Used by Ray Serve
+
+        {{ $spacing }}    # This volume allocates shared memory for Ray to use for its plasma
+        {{ $spacing }}    # object store. If you do not provide this, Ray will fall back to
+        {{ $spacing }}    # /tmp which cause slowdowns if is not a shared memory volume.
+        {{ $spacing }}    volumeMounts:
+        {{ $spacing }}    - mountPath: /dev/shm
+        {{ $spacing }}      name: dshm
+        {{ $spacing }}    resources:
+        {{ $spacing }}      requests:
+        {{ $spacing }}        cpu: {{ .CPU }}
+        {{ $spacing }}        memory: {{ .memory }}
+        {{ $spacing }}      limits:
+        {{ $spacing }}        cpu: {{ .CPU }}
+        {{ $spacing }}        # The maximum memory that this pod is allowed to use. The
+        {{ $spacing }}        # limit will be detected by ray and split to use 10% for
+        {{ $spacing }}        # redis, 30% for the shared memory object store, and the
+        {{ $spacing }}        # rest for application memory. If this limit is not set and
+        {{ $spacing }}        # the object store size is not set manually, ray will
+        {{ $spacing }}        # allocate a very large object store in each pod that may
+        {{ $spacing }}        # cause problems for other pods.
+        {{ $spacing }}        memory: {{ .memory }}
+        {{ $spacing }}        {{- if .GPU }}
+        {{ $spacing }}        nvidia.com/gpu: {{ .GPU }}
+        {{ $spacing }}        {{- end }}
+        {{ $spacing }}  {{- if .nodeSelector }}
+        {{ $spacing }}  nodeSelector:
+        {{ $spacing }}  {{- toYaml $val.nodeSelector | nindent 12 }}
+        {{ $spacing }}  {{- end }}
+        {{ $spacing }}  {{- if $val.tolerations }}
+        {{ $spacing }}  tolerations:
+        {{ $spacing }}  {{- toYaml $val.tolerations | nindent 10 }}
+        {{ $spacing }}  {{- end }}
+        {{ $spacing }}  {{- if $.Values.serviceAccountName }}
+        {{ $spacing }}  serviceAccountName: {{ $.Values.serviceAccountName }}
+        {{ $spacing }}  {{- end }}
+    {{- end }}
+  # Commands to start Ray on the head node. You don't need to change this.
+  # Note dashboard-host is set to 0.0.0.0 so that Kubernetes can port forward.
+  headStartRayCommands:
+    - ray stop
+    - ulimit -n 65536; ray start --head --port=6379 --no-monitor --dashboard-host 0.0.0.0
+  # Commands to start Ray on worker nodes. You don't need to change this.
+  workerStartRayCommands:
+    - ray stop
+    - ulimit -n 65536; ray start --address=$RAY_HEAD_IP:6379
 {{- end }}

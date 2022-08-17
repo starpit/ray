@@ -112,3 +112,11 @@ operatorNamespace: default
 # by the operator. In other words, the images specified under the fields `operatorImage` and `image`
 # should carry matching Ray versions.
 operatorImage: rayproject/ray:latest
+
+# @starpit 20220816
+operatorResources:
+  cpu: 1
+  storage: 1Gi
+  memory:
+    request: 1Gi
+    limit: 2Gi

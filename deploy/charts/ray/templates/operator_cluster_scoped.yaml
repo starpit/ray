@@ -57,10 +57,10 @@ spec:
           value: "inf"
         resources:
           requests:
-            cpu: 1
-            memory: 1Gi
-            ephemeral-storage: 1Gi
+            cpu: {{ .Values.operatorResources.cpu }}
+            memory: {{ .Values.operatorResources.memory.request }}
+            ephemeral-storage: {{ .Values.operatorResources.storage }}
           limits:
-            memory: 2Gi
-            cpu: 1
+            memory: {{ .Values.operatorResources.memory.limit }}
+            cpu: {{ .Values.operatorResources.cpu }}
 {{- end }}

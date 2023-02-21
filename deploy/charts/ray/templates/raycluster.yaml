@@ -30,6 +30,8 @@ spec:
         kind: Pod
         metadata:
           generateName: {{ kebabcase $key }}-
+          labels:
+            app.kubernetes.io/name: {{ $.Release.Name }}
         spec:
           restartPolicy: Never
           # This volume allocates shared memory for Ray to use for its plasma
